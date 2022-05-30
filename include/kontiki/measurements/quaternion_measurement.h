@@ -1,43 +1,44 @@
-//
-// Created by hannes on 2017-11-29.
-//
+#pragma once
+#ifndef KONTIKIV2_QUATERNION_MEASUREMENT_H
+#define KONTIKIV2_QUATERNION_MEASUREMENT_H
 
-#ifndef KONTIKIV2_POSITION_MEASUREMENT_H
-#define KONTIKIV2_POSITION_MEASUREMENT_H
+#include <Eigen/Geometry>
 
-#include <Eigen/Dense>
-
-#include <iostream>
 #include <kontiki/trajectories/trajectory.h>
 #include <kontiki/trajectory_estimator.h>
 
 namespace kontiki {
 namespace measurements {
 
-class PositionMeasurement {
-  using Vector3 = Eigen::Vector3d;
+class QuaternionMeasurement {
+  using Quaternion = Eigen::Quaterniond;
  public:
-  PositionMeasurement(double t, const Vector3 &p, double weight=1.0, double coster_th=7.8):
-    t_(t), p_(p), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {};
+  QuaternionMeasurement(double t, const Quaternion &q, double weight=1.0, double coster_th=7.8):
+    t_(t), q_(q), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {}
+  QuaternionMeasurement(double t, const Eigen::Vector4d &qvec, double weight=1.0, double coster_th=7.8)
+    : t_(t), q_(Eigen::Quaterniond(qvec(0), qvec(1), qvec(2), qvec(3))), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {}
 
   template<typename TrajectoryModel, typename T>
-  Eigen::Matrix<T, 3, 1> Measure(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
-    return trajectory.Position(T(t_));
-  };
+  Eigen::Quaternion<T> Measure(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
+    return trajectory.Orientation(T(t_));
+  }
 
   template<typename TrajectoryModel, typename T>
   Eigen::Matrix<T, 3, 1> Error(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
-    return T(weight_) * (p_.cast<T>() - Measure<TrajectoryModel, T>(trajectory));
+    Eigen::Quaternion<T> qhat = Measure<TrajectoryModel, T>(trajectory);
+    return T(weight_) * ErrorRaw<TrajectoryModel, T>(trajectory);
   }
 
   template<typename TrajectoryModel, typename T>
   Eigen::Matrix<T, 3, 1> ErrorRaw(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
-    return p_.cast<T>() - Measure<TrajectoryModel, T>(trajectory);
+    Eigen::Quaternion<T> qhat = Measure<TrajectoryModel, T>(trajectory);
+    Eigen::AngleAxis<T> aa { qhat.conjugate() * q_.cast<T>() };
+    return aa.angle() * aa.axis();
   }
 
   // Measurement data
   double t_;
-  Vector3 p_;
+  Quaternion q_;
   double weight_;
 
  protected:
@@ -45,7 +46,7 @@ class PositionMeasurement {
   // Residual struct for ceres-solver
   template<typename TrajectoryModel>
   struct Residual {
-    Residual(const PositionMeasurement &m) : measurement(m) {};
+    Residual(const QuaternionMeasurement &m) : measurement(m) {}
 
     template <typename T>
     bool operator()(T const* const* params, T* residual) const {
@@ -55,7 +56,7 @@ class PositionMeasurement {
       return true;
     }
 
-    const PositionMeasurement& measurement;
+    const QuaternionMeasurement& measurement;
     typename TrajectoryModel::Meta meta;
   }; // Residual;
 
@@ -90,23 +91,8 @@ class PositionMeasurement {
   template<template<typename> typename TrajectoryModel>
   friend class kontiki::TrajectoryEstimator;
 };
-
-class AnotherMeasurement {
-  using Vector3 = Eigen::Vector3d;
- public:
-  AnotherMeasurement(double t, const Vector3 &p) : t_(t), p_(p) {};
-
-  void hello() {
-    std::cout << "Hello from AnotherMeasurement!" << std::endl;
-  }
-
- protected:
-  double t_;
-  Vector3 p_;
-};
-
 } // namespace measurements
 } // namespace kontiki
 
 
-#endif //KONTIKIV2_POSITION_MEASUREMENT_H
+#endif //KONTIKIV2_QUATERNION_MEASUREMENT_H

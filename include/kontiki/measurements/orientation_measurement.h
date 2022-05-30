@@ -2,12 +2,11 @@
 // Created by hannes on 2017-11-29.
 //
 
+#pragma once
 #ifndef KONTIKIV2_ORIENTATION_MEASUREMENT_H
 #define KONTIKIV2_ORIENTATION_MEASUREMENT_H
 
 #include <Eigen/Dense>
-
-#include <iostream>
 #include <kontiki/trajectories/trajectory.h>
 #include <kontiki/trajectory_estimator.h>
 
@@ -17,25 +16,32 @@ namespace measurements {
 class OrientationMeasurement {
   using Quaternion = Eigen::Quaterniond;
  public:
-  OrientationMeasurement(double t, const Quaternion &q, double weight) : t(t), q(q), weight(weight) {}
-  OrientationMeasurement(double t, const Eigen::Vector4d &qvec, double weight)
-    : t(t), q(Eigen::Quaterniond(qvec(0), qvec(1), qvec(2), qvec(3))), weight(weight) {}
+  OrientationMeasurement(double t, const Quaternion &q, double weight=1.0, double coster_th=3.8):
+    t_(t), q_(q), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {}
+  OrientationMeasurement(double t, const Eigen::Vector4d &qvec, double weight=1.0, double coster_th=3.8)
+    : t_(t), q_(Eigen::Quaterniond(qvec(0), qvec(1), qvec(2), qvec(3))), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {}
 
   template<typename TrajectoryModel, typename T>
   Eigen::Quaternion<T> Measure(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
-    return trajectory.Orientation(T(t));
+    return trajectory.Orientation(T(t_));
   }
 
   template<typename TrajectoryModel, typename T>
   T Error(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
     Eigen::Quaternion<T> qhat = Measure<TrajectoryModel, T>(trajectory);
-    return T(weight) * q.cast<T>().angularDistance(qhat);
+    return T(weight_) * q_.cast<T>().angularDistance(qhat);
+  }
+
+  template<typename TrajectoryModel, typename T>
+  T ErrorRaw(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
+    Eigen::Quaternion<T> qhat = Measure<TrajectoryModel, T>(trajectory);
+    return q_.cast<T>().angularDistance(qhat);
   }
 
   // Measurement data
-  double t;
-  Quaternion q;
-  double weight;
+  double t_;
+  Quaternion q_;
+  double weight_;
 
  protected:
 
@@ -64,7 +70,7 @@ class OrientationMeasurement {
 
     // Add trajectory to problem
     //estimator.trajectory()->AddToProblem(estimator.problem(), residual->meta, parameter_blocks, parameter_sizes);
-    estimator.AddTrajectoryForTimes({{t,t}}, residual->meta, parameter_info);
+    estimator.AddTrajectoryForTimes({{t_,t_}}, residual->meta, parameter_info);
     for (auto& pi : parameter_info) {
       cost_function->AddParameterBlock(pi.size);
     }
@@ -75,9 +81,12 @@ class OrientationMeasurement {
 
     // Give residual block to estimator problem
     estimator.problem().AddResidualBlock(cost_function,
-                                         nullptr,
+                                         huber_coster_th_ < 0.0 ? nullptr : &huber_coster_,
                                          entity::ParameterInfo<double>::ToParameterBlocks(parameter_info));
   }
+
+  ceres::HuberLoss huber_coster_;
+  double huber_coster_th_ = 3.8;
 
   // TrajectoryEstimator must be a friend to access protected members
   template<template<typename> typename TrajectoryModel>

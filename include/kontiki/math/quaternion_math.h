@@ -13,7 +13,12 @@ static const double eps_unit_check = 1e-5;
 // FIXME: Change to Eigen::Map as inputs and outputs?
 
 template<typename T>
-Eigen::Quaternion <T> logq(const Eigen::Quaternion <T> &q) {
+Eigen::Quaternion <T> logq(const Eigen::Quaternion <T> &_q) {
+  auto q = _q;
+  if(q.w() < 0.0) {
+    q.coeffs() = -q.coeffs();
+  }
+  
   auto qn = q.norm();
 
   if(ceres::abs(qn - T(1.0)) > eps_unit_check) {
