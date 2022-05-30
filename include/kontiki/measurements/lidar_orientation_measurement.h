@@ -20,28 +20,44 @@ class LiDAROrientationMeasurement {
   using Quat = Eigen::Quaternion<double>;
 //  Eigen::Quaternion<T>
  public:
-  LiDAROrientationMeasurement(std::shared_ptr<LiDARModel> lidar, double t, const Quat &q)
-    : lidar_(lidar), t(t), q_(q) {}
+  LiDAROrientationMeasurement(std::shared_ptr<LiDARModel> lidar, double t, const Quat &q, double weight=1.0, double coster_th=3.8)
+    : lidar_(lidar), t_(t), q_(q), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {}
 
   template<typename TrajectoryModel, typename T>
   Eigen::Quaternion<T> Measure(const type::Trajectory<TrajectoryModel, T> &trajectory,
                                  const type::LiDAR<LiDARModel, T> &lidar) const {
-    Eigen::Quaternion<T> q_M_I = trajectory.Orientation(T(t));
-    const Eigen::Quaternion<T> q_L_I = lidar.relative_orientation();
-    Eigen::Quaternion<T> q_M_L = q_M_I * q_L_I.conjugate();
-    return q_M_L;
+    Eigen::Quaternion<T> q_W_B = trajectory.Orientation(T(t_));
+    const Eigen::Quaternion<T> q_B_L = lidar.relative_orientation();
+    Eigen::Quaternion<T> q_W_L = q_W_B * q_B_L;
+    return q_W_L;
   }
 
   template<typename TrajectoryModel, typename T>
   T Error(const type::Trajectory<TrajectoryModel, T> &trajectory, const type::LiDAR<LiDARModel, T> &lidar) const {
+    return T(weight_) * ErrorRaw<TrajectoryModel, T>(trajectory, lidar);
+  }
+
+  template<typename TrajectoryModel, typename T>
+  T Error(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
+    return Error<TrajectoryModel, T>(trajectory, *lidar_);
+  }
+
+  template<typename TrajectoryModel, typename T>
+  T ErrorRaw(const type::Trajectory<TrajectoryModel, T> &trajectory, const type::LiDAR<LiDARModel, T> &lidar) const {
     Eigen::Quaternion<T> qhat = Measure<TrajectoryModel, T>(trajectory, lidar);
     return q_.cast<T>().angularDistance(qhat);
   }
 
+  template<typename TrajectoryModel, typename T>
+  T ErrorRaw(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
+    return ErrorRaw<TrajectoryModel, T>(trajectory, *lidar_);
+  }
+
   // Measurement data
   std::shared_ptr<LiDARModel> lidar_;
-  double t;
+  double t_;
   Quat q_;
+  double weight_;
 
  protected:
 
@@ -76,8 +92,8 @@ class LiDAROrientationMeasurement {
 
     // Add trajectory to problem
     //estimator.trajectory()->AddToProblem(estimator.problem(), residual->meta, parameter_blocks, parameter_sizes);
-    estimator.AddTrajectoryForTimes({{t,t}}, residual->trajectory_meta, parameter_info);
-    lidar_->AddToProblem(estimator.problem(), {{t,t}}, residual->lidar_meta, parameter_info);
+    estimator.AddTrajectoryForTimes({{t_,t_}}, residual->trajectory_meta, parameter_info);
+    lidar_->AddToProblem(estimator.problem(), {{t_,t_}}, residual->lidar_meta, parameter_info);
 
 
     for (auto& pi : parameter_info) {
@@ -90,9 +106,12 @@ class LiDAROrientationMeasurement {
 
     // Give residual block to estimator problem
     estimator.problem().AddResidualBlock(cost_function,
-                                         nullptr,
+                                         huber_coster_th_ < 0.0 ? nullptr : &huber_coster_,
                                          entity::ParameterInfo<double>::ToParameterBlocks(parameter_info));
   }
+
+  ceres::HuberLoss huber_coster_;
+  double huber_coster_th_ = 3.8;
 
   // TrajectoryEstimator must be a friend to access protected members
   template<template<typename> typename TrajectoryModel>
