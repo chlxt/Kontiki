@@ -189,23 +189,8 @@ class SplineView : public TrajectoryView<T, MetaType> {
     int parameter_offset = 0;
     for (auto &seg : segments) {
       // if ((t >= seg->MinTime()) && (t < seg->MaxTime())) {
-      //   return seg->Evaluate(t, flags);
-      // } else {
-      //   T t_temp = t - T(0.00001);
-      //   if ((t_temp >= seg->MinTime()) && (t_temp < seg->MaxTime())) {
-      //     return seg->Evaluate(t_temp, flags);
-      //   }
-      // }
-
-      T t_temp = t;
-      if(t_temp < seg->MinTime()) {
-        t_temp += T(1e-8);
-      }
-      if(t_temp >= seg->MaxTime()) {
-        t_temp -= T(1e-8);
-      }
-      if ((t_temp >= seg->MinTime()) && (t_temp < seg->MaxTime())) {
-        return seg->Evaluate(t_temp, flags);
+      if ((t >= seg->MinTime()) && (t <= seg->MaxTime())) { // fixed for equal case where t is large
+        return seg->Evaluate(t, flags);
       }
     }
 
