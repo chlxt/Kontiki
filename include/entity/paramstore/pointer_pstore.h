@@ -28,10 +28,13 @@ struct PointerParameterStore : public ParameterStore<T> {
     throw std::runtime_error("PointerParameterStore can not add parameters");
   }
 
-  ParameterInfo<T> Parameter(size_t i) const override {
+  const ParameterInfo<T>& Parameter(size_t i) const override {
     throw std::runtime_error("PointerParameterStore can not return ParameterInfo data");
   }
 
+  ParameterInfo<T>& Parameter(size_t i) override {
+    throw std::runtime_error("PointerParameterStore can not return ParameterInfo data");
+  }
 
   ParameterStore<T>* Slice(size_t offset, size_t length) const {
     return new PointerParameterStore<T>(&params[offset]);

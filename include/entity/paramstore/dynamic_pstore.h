@@ -29,10 +29,13 @@ class DynamicParameterStore : public ParameterStore<T> {
     return new_idx;
   }
 
-  entity::ParameterInfo<T> Parameter(size_t i) const override {
+  const entity::ParameterInfo<T>& Parameter(size_t i) const override {
     return parameters_.at(i);
   }
 
+  entity::ParameterInfo<T>& Parameter(size_t i) override {
+    return parameters_.at(i);
+  }
 
   size_t Size() const override {
     return parameters_.size();

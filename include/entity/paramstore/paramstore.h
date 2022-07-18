@@ -39,7 +39,8 @@ struct ParameterStore {
   virtual size_t AddParameter(size_t ndims, ceres::LocalParameterization* parameterization=nullptr) = 0;
   virtual size_t Size() const = 0;
   virtual ParameterStore<T>* Slice(size_t offset, size_t length) const = 0;
-  virtual ParameterInfo<T> Parameter(size_t i) const = 0;
+  virtual const ParameterInfo<T>& Parameter(size_t i) const = 0;
+  virtual ParameterInfo<T>& Parameter(size_t i) = 0;
 };
 
 } // namespace entity

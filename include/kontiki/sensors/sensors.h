@@ -90,8 +90,10 @@ class SensorEntity : public type::Entity<ViewTemplate, MetaType, StoreType> {
  public:
   SensorEntity() :
       orientation_parameterization_(new ceres::EigenQuaternionParameterization()),
+      position_parameterization_(nullptr),
       relative_position_locked_(true),
       relative_orientation_locked_(true),
+      relative_position_x_locked_(true), relative_position_y_locked_(true), relative_position_z_locked_(true),
       time_offset_locked_(true) {
       // 0: Relative orientation
       this->pstore_->AddParameter(4, orientation_parameterization_.get());
@@ -122,6 +124,21 @@ class SensorEntity : public type::Entity<ViewTemplate, MetaType, StoreType> {
 
   void LockRelativePosition(bool flag) {
     relative_position_locked_ = flag;
+    relative_position_x_locked_ = relative_position_y_locked_ = relative_position_z_locked_ = flag;
+  }
+
+  void LockRelativePosition(bool flag_x, bool flag_y, bool flag_z) {
+    relative_position_x_locked_ = flag_x;
+    relative_position_y_locked_ = flag_y;
+    relative_position_z_locked_ = flag_z;
+    relative_position_locked_ = flag_x && flag_y && flag_z;
+    if(!relative_position_locked_ && (relative_position_x_locked_ || relative_position_y_locked_ || relative_position_z_locked_)) {
+      std::vector<int> mask_inds;
+      if(relative_position_x_locked_) mask_inds.push_back(0);
+      if(relative_position_y_locked_) mask_inds.push_back(1);
+      if(relative_position_z_locked_) mask_inds.push_back(2);
+      position_parameterization_.reset(new ceres::SubsetParameterization(3, mask_inds));
+    }
   }
 
   bool TimeOffsetIsLocked() const {
@@ -149,10 +166,13 @@ class SensorEntity : public type::Entity<ViewTemplate, MetaType, StoreType> {
 
     // Relative translation p_ct
     problem.AddParameterBlock(pi_pct.data, pi_pct.size, pi_pct.parameterization);
+    if (relative_position_locked_) {
+      problem.SetParameterBlockConstant(pi_pct.data);
+    } else if(relative_position_x_locked_ || relative_position_y_locked_ || relative_position_z_locked_) {
+      problem.AddParameterBlock(pi_pct.data, pi_pct.size, position_parameterization_.get());
+    }
     parameters.push_back(pi_pct);
 
-    if (relative_position_locked_)
-      problem.SetParameterBlockConstant(pi_pct.data);
 
     // Time offset is constrained to (-d, d)
     problem.AddParameterBlock(pi_offset.data, pi_offset.size, pi_offset.parameterization);
@@ -167,8 +187,10 @@ class SensorEntity : public type::Entity<ViewTemplate, MetaType, StoreType> {
  protected:
   bool relative_position_locked_;
   bool relative_orientation_locked_;
+  bool relative_position_x_locked_, relative_position_y_locked_, relative_position_z_locked_;
   bool time_offset_locked_;
   std::unique_ptr<ceres::EigenQuaternionParameterization> orientation_parameterization_;
+  std::unique_ptr<ceres::SubsetParameterization> position_parameterization_;
 };
 
 
