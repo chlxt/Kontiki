@@ -18,11 +18,16 @@ class PositionMeasurement {
   using Vector3 = Eigen::Vector3d;
  public:
   PositionMeasurement(double t, const Vector3 &p, double weight=1.0, double coster_th=7.8):
-    t_(t), p_(p), weight_(weight), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {};
+    t_(t), p_(p), weight_(weight), off_(0.0, 0.0, 0.0), huber_coster_th_(coster_th), huber_coster_(coster_th>=0.0?coster_th:1e38) {};
 
   template<typename TrajectoryModel, typename T>
   Eigen::Matrix<T, 3, 1> Measure(const type::Trajectory<TrajectoryModel, T> &trajectory) const {
-    return trajectory.Position(T(t_));
+    if(off_.cwiseAbs().sum() < 1e-8) {
+      return trajectory.Position(T(t_));
+    } else {
+      auto orien_WB = trajectory.Orientation(T(t_));
+      return trajectory.Position(T(t_)) + orien_WB * off_.cast<T>();
+    }
   };
 
   template<typename TrajectoryModel, typename T>
@@ -39,6 +44,7 @@ class PositionMeasurement {
   double t_;
   Vector3 p_;
   double weight_;
+  Vector3 off_;
 
  protected:
 
